@@ -8,5 +8,5 @@ Current Features:
 - Simulate a virtual battle between two super characters and determine the outcome based on their battle stats from the Superhero API.
 - Display all information that the bot has gathered about a user.
 - Assign a user a random IQ rating.
-- Automatically "absorb" any links that a user posts in Discord and store them into a Replit database.
-- Retrieve a list of links that Brainiac has absorbed into its database.
+- Automatically "absorb" any links or quotes that a user posts in Discord and store them into a Replit database.
+- Retrieve a list of links or quotes that Brainiac has absorbed into its database.
