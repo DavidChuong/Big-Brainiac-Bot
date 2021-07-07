@@ -10,3 +10,4 @@ Current Features:
 - Assign a user a random IQ rating.
 - Automatically "absorb" any links or quotes that a user posts in Discord and store them into a Replit database.
 - Retrieve a list of links or quotes that Brainiac has absorbed into its database.
+- Send a custom welcome message to any new users who join the server.
