@@ -6,17 +6,18 @@ from keepalive import keep_alive
 import random
 from replit import db
 
-client = discord.Client() 
+#Setup to grab member info as soon as they join.
+intents = discord.Intents.default()
+intents.members = True
+client = discord.Client(intents=intents)
 
 my_access = os.environ['ACCESS'] #Obtain access key for API.
 
 #Function that accesses information about a superhero from the SuperHero API and returns a dictionary containing all of the information.
-def get_info(id, powerstats=False):
+def get_info(id):
   """Return information about a superhero in the form of a dictionary given the ID of the superhero."""
   #Obtain URL for the superhero we are trying to access information about.
   url = "https://superheroapi.com/api/" + str(my_access) + "/" + str(id)
-  if (powerstats):
-    url += "/powerstats"
   #Request json of info and load it onto a dictionary.
   info_json = requests.get(url) 
   info_dict = json.loads(info_json.text) 
@@ -92,15 +93,15 @@ def format_results(possible_IDs, search_term):
 #Function that predicts the outcome of a battle.
 def predict_outcome(ids):
   """Return a string message that predicts the outcome of a battle between two characters."""
+  #Obtain dictionaries of the characters.
+  info_1 = get_info(ids[0])
+  info_2 = get_info(ids[1])
+  #Obtain the names of the characters.
+  name_1 = info_1["name"]
+  name_2 = info_2["name"]
   #Obtain powerstats for both characters.
-  stats_1 = get_info(ids[0], True)
-  stats_2 = get_info(ids[1], True)
-  del(stats_1["response"])
-  del(stats_1["id"])
-  del(stats_1["name"])
-  del(stats_2["response"])
-  del(stats_2["id"])
-  del(stats_2["name"])
+  stats_1 = info_1["powerstats"]
+  stats_2 = info_2["powerstats"]
   #Extract stats from the dictionaries and sum them up.
   score_1 = 0;
   score_2 = 0;
@@ -108,11 +109,6 @@ def predict_outcome(ids):
     score_1 += int(stat)
   for stat in stats_2.values():
     score_2 += int(stat)
-  #Obtain the names of the characters.
-  info_1 = get_info(ids[0])
-  info_2 = get_info(ids[1])
-  name_1 = info_1["name"]
-  name_2 = info_2["name"]
   #Initialize message that will be sent.
   result = "*Neural network is now simulating battle between " + name_1 + " and " + name_2 + ".*\n\n"
   #Determine the probability of each character winning the battle.
@@ -175,21 +171,21 @@ def rate_iq(author):
     rating += "are profoundly gifted. Impressive, human. Perhaps you will be a worthly rival for the Great Brainiac."
   return rating
 
-#Function that absorbs a URL that a user posts.
-def absorb_info(url, user):
+#Function that absorbs information that a user posts.
+def absorb_info(info, user, info_type):
   """Absorbs a URL into Brainiac's database."""
   #Add URL to list of links that have been posted.
   if user in db.keys():
-    if "Links" in db[user].keys():
-      links = db[user]["Links"]
-      links.append(url)
-      db[user]["Links"] = links
+    if info_type in db[user].keys():
+      stored_info = db[user][info_type]
+      stored_info.append(info)
+      db[user][info_type] = stored_info
     else:
-      db[user]["Links"] = [url]
+      db[user][info_type] = [info]
   #Otherwise, create a new list for the user.
   else:
     db[user] = {}
-    db[user]["Links"] = [url]
+    db[user][info_type] = [info]
 
 #Notifies operator when bot is logged onto the server.
 @client.event
@@ -198,12 +194,12 @@ async def on_ready():
   print('We have logged in as: {0.user}'.format(client))
 
 #Sends welcome message to a person when they first join the server.
-#CURRENTLY NOT WORKING!
 @client.event
 async def on_member_join(member):
-  channel = client.get_channel(849063885519585302)
+  guild = client.get_guild(849063884992151552)
+  channel = guild.get_channel(849063885519585302)
   welcome = "Welcome, " + member.mention + ". I look forward to adding your knowledge to my database."
-  await client.send_message(discord.Object(id=channel), welcome)
+  await channel.send(welcome)
 
 #Perform an action based on the message a user sends.
 @client.event
@@ -224,7 +220,8 @@ async def on_message(message):
                 '**USER DATABASE COMMANDS**',
                 '?me - Displays all information that Brainiac has gathered about you.',
                 '?iq - Assesses your IQ.',
-                '?retrieve - Retrieves a list of all of the links you have posted that Brainiac has absorbed into his database.']
+                '?links - Retrieves a list of all of the links you have posted that Brainiac has absorbed into his database.',
+                '?quotes - Retrieves a list of all of the quotes you have posted that Brainiac has absorbed into his database.']
     for command in commands: 
       help_message += command + "\n"
     await message.channel.send(help_message)
@@ -280,9 +277,9 @@ async def on_message(message):
     if user_name in db.keys():
       for category, info in db[user_name].items():
         if (not isinstance(info, str)) and (not isinstance(info, int)):
-          user_info += category + ": " + info[0]
-          for link in info[1:]:
-            user_info += ", " + link
+          user_info += category + ":\n"
+          for link in info:
+            user_info += link + "\n"
         else:
           user_info += category + ": " + str(info) + "\n"
     #Otherwise, say that there is no info on the user.
@@ -302,13 +299,13 @@ async def on_message(message):
   if (message.content.startswith('https://') or message.content.startswith('http://')):
     #Absorb the link that was posted.
     user = message.author.name
-    absorb_info(message.content[:], user)
+    absorb_info(message.content[:], user, "Links")
     #Notify the user that their link was absorbed.
     absorb_notif = "Your link has been absorbed into my database, " + message.author.mention + ". MUST OBTAIN MORE KNOWLEDGE."
     await message.channel.send(absorb_notif)
 
-  #Lists all links that have ever been posted by users.
-  if (message.content.startswith('?retrieve')):
+  #Lists all links that have ever been posted by a user.
+  if (message.content.startswith('?links')):
     user = message.author.name
     link_list = message.author.mention + ", here are all of the links that you have contributed to my enormous database:\n\n"
     if user in db.keys():
@@ -321,6 +318,30 @@ async def on_message(message):
     else:
       link_list += "No links found."
     await message.channel.send(link_list)
+
+  #Absorbs any quotes that users post.
+  if (message.content.startswith('\"') and message.content.endswith('\"')):
+    #Absorb the quote that was posted.
+    user = message.author.name
+    absorb_info(message.content[:], user, "Quotes")
+    #Notify the user that their quote was absorbed.
+    absorb_notif = "Your quote has been absorbed into my database, " + message.author.mention + ". MUST OBTAIN MORE KNOWLEDGE."
+    await message.channel.send(absorb_notif)
+
+  #Lists all quotes that have ever been posted by a user.
+  if (message.content.startswith('?quotes')):
+    user = message.author.name
+    quote_list = message.author.mention + ", here are all of the quotes that you have contributed to my enormous database:\n\n"
+    if user in db.keys():
+      if "Quotes" in db[user].keys():
+        quotes = db[user]["Quotes"]
+        for quote in quotes:
+          quote_list += quote + "\n"
+      else:
+        quote_list += "No quotes found."
+    else:
+      quote_list += "No quotes found."
+    await message.channel.send(quote_list)
   
   #Temporary singular clear command.
   if (message.content.startswith('?clear')):
